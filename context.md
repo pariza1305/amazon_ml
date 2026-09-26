@@ -29,3 +29,9 @@ Running log of what's been done, decisions made, and current state. Append, don'
 ## Next up
 - Phase 3: `src/blocking.py` — country bucketing + inverted-index blocking (name tokens, address tokens/pin) + top-K cap
 - Then Phase 4 features, Phase 5 train.py, Phase 6 eval.py, Phase 7 predict.py
+
+### 2026-09-26 — Phase 3: blocking.py
+- Built `src/blocking.py`: country bucketing (dict keyed by country_norm, no hard-coded list) + inverted-index blocking on IDF-weighted name tokens + exact PIN + locality tokens
+- `candidates_for_entity()` combines all 3 signals into one score, caps at top_k (default 20)
+- Tested on a small synthetic India example: correctly picked the true match, excluded an unrelated record
+- Not yet run against real data / not yet tuned (recall ceiling vs candidate size) — that's the Phase 6 tuning loop, comes after features+train exist so we have something to validate end-to-end
