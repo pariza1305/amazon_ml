@@ -1,0 +1,6 @@
+student_resource/dataset/
+__MACOSX/
+student_resource/.DS_Store
+*.pyc
+**/__pycache__/
+student_resource/output/*.tsv
