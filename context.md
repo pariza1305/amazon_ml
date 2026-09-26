@@ -3,9 +3,9 @@
 Running log of what's been done, decisions made, and current state. Append, don't rewrite history.
 
 ## Repo layout
-- `student_resource/` = contest root (matches required paths: dataset/, utils/, output/, code/, Documentation_template.md)
-- `student_resource/dataset/` is git-ignored (huge: ~2.5GB total, train S1=2.2M rows, S2=5.0M, S3=5.3M; test S1=1.7M, S2=4.9M, S3=5.1M rows)
-- `student_resource/code/business_entity_resolution/src/` = pipeline source
+- `` = contest root (matches required paths: dataset/, utils/, output/, code/, Documentation_template.md)
+- `dataset/` is git-ignored (huge: ~2.5GB total, train S1=2.2M rows, S2=5.0M, S3=5.3M; test S1=1.7M, S2=4.9M, S3=5.1M rows)
+- `code/business_entity_resolution/src/` = pipeline source
 - Full plan doc (phases 0-9): https://claude.ai/artifact/9hz5kE7sNWdS1HQPZkUAYQ
 
 ## Environment
@@ -15,7 +15,7 @@ Running log of what's been done, decisions made, and current state. Append, don'
 ## Progress log
 
 ### 2026-09-25 — Phase 0/2: setup + normalize.py
-- Dataset placed by user in `student_resource/dataset/{train,test}/`
+- Dataset placed by user in `dataset/{train,test}/`
 - Created dirs: `code/business_entity_resolution/src/`, `output/`
 - Row counts confirmed (see above)
 - Built `src/normalize.py`:
