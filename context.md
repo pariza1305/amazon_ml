@@ -35,3 +35,9 @@ Running log of what's been done, decisions made, and current state. Append, don'
 - `candidates_for_entity()` combines all 3 signals into one score, caps at top_k (default 20)
 - Tested on a small synthetic India example: correctly picked the true match, excluded an unrelated record
 - Not yet run against real data / not yet tuned (recall ceiling vs candidate size) — that's the Phase 6 tuning loop, comes after features+train exist so we have something to validate end-to-end
+
+### 2026-09-26 — repo flattened + Phase 4: features.py
+- Moved everything from `student_resource/` up to repo root per user request: `dataset/`, `code/`, `output/`, `utils/`, `Documentation_template.md` now live directly under `C:\dev\amazon_ml`. Renamed contest `README.md` -> `CHALLENGE_BRIEF.md` to avoid clobbering repo root README. Updated `.gitignore` paths accordingly. Git recorded these as renames (history preserved).
+- Built `src/features.py`: 16 pairwise features (FEATURE_NAMES) covering name similarity (jaccard/jaro-winkler/levenshtein/token-sort/common-tokens/exact-match/length-diff), address similarity (jaccard/levenshtein/house-number/pin/locality match/length-diff), same_country flag, block_score passthrough, source indicator
+- `add_relative_rank_features()`: post-scoring helper, adds rank-within-entity and score-gap-to-next-best (per S1 entity) — used to help the model separate a clear best match from several mediocre look-alikes
+- Tested `compute_features()` on a typo'd name-match example, values look sane (high jaro-winkler/levenshtein despite low token-jaccard on the typo, as expected)
