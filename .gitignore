@@ -4,3 +4,4 @@ __MACOSX/
 *.pyc
 **/__pycache__/
 output/*.tsv
+*.log
