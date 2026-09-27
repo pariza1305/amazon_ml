@@ -26,14 +26,14 @@ from features import compute_features, FEATURE_NAMES
 SRC_DIR = __file__.rsplit("/", 1)[0]
 
 
-def load_threshold(explicit):
-    if explicit is not None:
-        return explicit
+def load_threshold_config():
+    """Returns the full threshold.json dict (threshold + the blocking params
+    training was calibrated with), or a safe fallback if it doesn't exist."""
     path = os.path.join(SRC_DIR, "threshold.json")
     if os.path.exists(path):
         with open(path) as f:
-            return json.load(f)["threshold"]
-    return 0.5  # fallback if never calibrated
+            return json.load(f)
+    return {"threshold": 0.5, "top_k": 20, "per_route_k": None, "final_top_k": None}
 
 
 def write_tsv(path, rows, id_col_name):
@@ -50,11 +50,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n1", type=int, default=None, help="limit test S1 rows (debug only; omit for full run)")
     ap.add_argument("--n23", type=int, default=None, help="limit test S2/S3 rows (debug only; omit for full run)")
-    ap.add_argument("--top-k", type=int, default=20)
+    ap.add_argument("--top-k", type=int, default=None,
+                    help="per-route candidate cap; defaults to threshold.json's value from training, "
+                         "falling back to 20 if that file is missing")
+    ap.add_argument("--per-route-k", type=int, default=None)
+    ap.add_argument("--final-top-k", type=int, default=None)
     ap.add_argument("--threshold", type=float, default=None)
     args = ap.parse_args()
 
-    threshold = load_threshold(args.threshold)
+    cfg = load_threshold_config()
+    threshold = args.threshold if args.threshold is not None else cfg["threshold"]
+    top_k = args.top_k if args.top_k is not None else cfg.get("top_k", 20)
+    per_route_k = args.per_route_k if args.per_route_k is not None else cfg.get("per_route_k")
+    final_top_k = args.final_top_k if args.final_top_k is not None else cfg.get("final_top_k")
     t0 = time.time()
 
     s1 = load_and_normalize("dataset/test/test_source1.tsv", nrows=args.n1)
@@ -84,7 +92,8 @@ def main():
             continue
         name_idx, name_idf, pin_idx, loc_idx = indexes[country]
         cands = candidates_for_entity(norm["name_tokens"], norm["addr_pin"], norm["addr_locality"],
-                                       name_idx, name_idf, pin_idx, loc_idx, top_k=args.top_k)
+                                       name_idx, name_idf, pin_idx, loc_idx,
+                                       top_k=top_k, per_route_k=per_route_k, final_top_k=final_top_k)
         if not cands:
             candidate_rows.append((eid, ""))
             match_rows.append((eid, ""))

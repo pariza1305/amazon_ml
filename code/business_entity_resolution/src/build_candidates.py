@@ -11,9 +11,24 @@ from normalize import normalize_row
 from blocking import build_country_bucket_indexes, candidates_for_entity
 
 
-def load_and_normalize(path, nrows=None):
-    """Returns list of (entity_id, norm_dict) for one source file."""
+def load_and_normalize(path, nrows=None, sample_n=None, seed=42):
+    """Returns list of (entity_id, norm_dict) for one source file.
+
+    nrows: read only the first N rows (fast I/O cap; NOT a representative
+        sample -- fine for S2/S3 dev-mode row caps, since the final run
+        uses the full files anyway).
+    sample_n: read the full file, then take a true random sample of
+        sample_n rows before normalizing (representative; use this for S1
+        when the validation split needs to reflect the whole population,
+        not just the file's row order). Ignored if nrows is also set and
+        smaller than sample_n would require (nrows still caps I/O first).
+        Mutually informative with nrows: if both given, reads nrows rows
+        then randomly samples sample_n of those (rarely what you want --
+        prefer passing sample_n alone for a true population-level sample).
+    """
     df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False, nrows=nrows)
+    if sample_n is not None and sample_n < len(df):
+        df = df.sample(n=sample_n, random_state=seed)
     out = []
     for row in df.itertuples(index=False):
         norm = normalize_row(row.business_name, row.business_address, row.country)
@@ -44,7 +59,7 @@ def build_indexes(s2_records, s3_records):
     return indexes, is_source2
 
 
-def generate_candidates(s1_records, indexes, top_k=20):
+def generate_candidates(s1_records, indexes, top_k=20, per_route_k=None, final_top_k=None):
     """Returns {s1_entity_id: [(cand_id, score), ...]}"""
     out = {}
     for eid, norm in s1_records:
@@ -55,7 +70,8 @@ def generate_candidates(s1_records, indexes, top_k=20):
         name_idx, name_idf, pin_idx, loc_idx = indexes[country]
         cands = candidates_for_entity(
             norm["name_tokens"], norm["addr_pin"], norm["addr_locality"],
-            name_idx, name_idf, pin_idx, loc_idx, top_k=top_k)
+            name_idx, name_idf, pin_idx, loc_idx,
+            top_k=top_k, per_route_k=per_route_k, final_top_k=final_top_k)
         out[eid] = cands
     return out
 

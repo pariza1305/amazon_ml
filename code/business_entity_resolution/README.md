@@ -1,7 +1,15 @@
 # Business Entity Resolution — Amazon ML Challenge 2026
 
-Status as of 2026-09-26 (Day 2 of 3). **Not competition-ready yet** — see
-"What's left" below before assuming this can be submitted as-is.
+Status as of 2026-09-27 (Day 3 of 3 — final day). **Not competition-ready
+yet** — see "What's left" below before assuming this can be submitted
+as-is. Teammates ran real experiments on Kaggle (full-scale compute) and
+found blocking recall ceiling (~63.7% at best) is the #1 bottleneck, not
+the classifier — see `context.md`, 2026-09-27, for the full experiment
+log and the resulting `blocking.py` rewrite (independent-route union
+instead of one combined-score cutoff). **That rewrite needs to be
+re-validated at Kaggle scale** — this dev environment cannot run 500K+
+row experiments within its per-call time limit, so only a synthetic
+correctness check has been done so far, not a real recall number.
 
 Full running log of every change, decision and caveat: **`../../context.md`**
 (repo root). Read that first if you want the blow-by-blow; this file is the
@@ -63,7 +71,14 @@ features -> train w/ val split + threshold calibration -> predict ->
 format-validated output). Everything below is "run it for real and tune it,"
 not "build something new."
 
-1. **Full-scale run.** Everything so far has only been run on small
+1. **Re-validate blocking on Kaggle at real scale (top priority, day 3).**
+   `blocking.py` was just rewritten (independent name/PIN/locality routes,
+   unioned, instead of one combined score with a single top-K cutoff) to
+   fix the ~36% blocking-recall loss found in real Kaggle experiments. Run
+   the exact commands in `context.md`'s "Next up" section (2026-09-27 entry)
+   to get a real before/after recall-ceiling number — this has only been
+   verified with a synthetic unit test here, not at the scale that matters.
+2. **Full-scale run.** Everything so far has only been run on small
    row-prefix samples (a few hundred thousand rows) for speed. The real
    files are 5M+ rows per source; a full run has NOT been done and current
    F0.5/recall/candidate-count numbers are NOT meaningful — see the

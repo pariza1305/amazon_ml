@@ -1,8 +1,10 @@
 {
-  "threshold": 0.8,
-  "val_macro_f05": 0.12691983710733706,
-  "val_recall_ceiling": 0.04184536393838719,
-  "n1": 5000,
+  "threshold": 0.05,
+  "val_macro_f05": 0.11031913832494053,
+  "val_recall_ceiling": 0.042309412027721864,
+  "n1": 3000,
   "n23": 300000,
-  "top_k": 20
+  "top_k": 20,
+  "per_route_k": null,
+  "final_top_k": null
 }

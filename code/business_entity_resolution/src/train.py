@@ -42,7 +42,7 @@ def split_entities(s1_ids, val_frac, seed):
     return train_ids, val_ids
 
 
-def build_rows(s1, indexes, s2_norm, s3_norm, gt, top_k):
+def build_rows(s1, indexes, s2_norm, s3_norm, gt, top_k, per_route_k=None, final_top_k=None):
     rows = []
     for eid, norm in s1:
         country = norm["country_norm"]
@@ -50,7 +50,8 @@ def build_rows(s1, indexes, s2_norm, s3_norm, gt, top_k):
             continue
         name_idx, name_idf, pin_idx, loc_idx = indexes[country]
         cands = candidates_for_entity(norm["name_tokens"], norm["addr_pin"], norm["addr_locality"],
-                                       name_idx, name_idf, pin_idx, loc_idx, top_k=top_k)
+                                       name_idx, name_idf, pin_idx, loc_idx,
+                                       top_k=top_k, per_route_k=per_route_k, final_top_k=final_top_k)
         true_matches = gt.get(eid, set())
         for cand_id, score in cands:
             cand_norm = s2_norm.get(cand_id) or s3_norm.get(cand_id)
@@ -84,15 +85,23 @@ def sweep_threshold(val_rows, probs, val_gt, all_val_ids):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n1", type=int, default=20000)
-    ap.add_argument("--n23", type=int, default=1000000)
-    ap.add_argument("--top-k", type=int, default=20)
+    ap.add_argument("--n1", type=int, default=20000,
+                    help="number of S1 rows to use, drawn as a TRUE RANDOM SAMPLE "
+                         "of the full file (not the first N) for a representative split")
+    ap.add_argument("--n23", type=int, default=1000000,
+                    help="row-prefix cap on S2/S3 (dev-mode I/O limit; full run omits this)")
+    ap.add_argument("--top-k", type=int, default=20, help="per-route candidate cap (see blocking.py)")
+    ap.add_argument("--per-route-k", type=int, default=None,
+                    help="override per-route cap independently of --top-k (defaults to --top-k)")
+    ap.add_argument("--final-top-k", type=int, default=None,
+                    help="optional cap on the unioned candidate set size (default: no cap, "
+                         "prioritizing recall over candidate-set size until blocking is tuned)")
     ap.add_argument("--val-frac", type=float, default=0.2)
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 
     t0 = time.time()
-    s1 = load_and_normalize("dataset/train/train_source1.tsv", nrows=args.n1)
+    s1 = load_and_normalize("dataset/train/train_source1.tsv", sample_n=args.n1, seed=args.seed)
     s2 = load_and_normalize("dataset/train/train_source2.tsv", nrows=args.n23)
     s3 = load_and_normalize("dataset/train/train_source3.tsv", nrows=args.n23)
     gt = load_ground_truth("dataset/train/train_ground_truth.tsv")
@@ -107,8 +116,10 @@ def main():
     s1_val = [(e, n) for e, n in s1 if e in val_ids]
     print(f"[{time.time()-t0:.0f}s] split: {len(s1_train)} train entities, {len(s1_val)} val entities")
 
-    train_rows = build_rows(s1_train, indexes, s2_norm, s3_norm, gt, args.top_k)
-    val_rows = build_rows(s1_val, indexes, s2_norm, s3_norm, gt, args.top_k)
+    train_rows = build_rows(s1_train, indexes, s2_norm, s3_norm, gt, args.top_k,
+                             args.per_route_k, args.final_top_k)
+    val_rows = build_rows(s1_val, indexes, s2_norm, s3_norm, gt, args.top_k,
+                           args.per_route_k, args.final_top_k)
     n_pos_train = sum(r["label"] for r in train_rows)
     print(f"[{time.time()-t0:.0f}s] train candidate rows: {len(train_rows)} (pos={n_pos_train}); "
           f"val candidate rows: {len(val_rows)}")
@@ -146,7 +157,8 @@ def main():
         with open("code/business_entity_resolution/src/threshold.json", "w") as f:
             json.dump({"threshold": best_t, "val_macro_f05": best_f05,
                        "val_recall_ceiling": ceiling, "n1": args.n1, "n23": args.n23,
-                       "top_k": args.top_k}, f, indent=2)
+                       "top_k": args.top_k, "per_route_k": args.per_route_k,
+                       "final_top_k": args.final_top_k}, f, indent=2)
     else:
         print("no val rows produced - threshold not calibrated")
 

@@ -84,3 +84,33 @@ Running log of what's been done, decisions made, and current state. Append, don'
 - Updated `code/business_entity_resolution/README.md`: status table now reflects predict.py as done + format-validated; "What's left" rewritten to reflect the pipeline being functionally complete, with exact copy-pasteable commands for the full-scale run (train.py -> predict.py -> validate_submission.py --check-ids).
 - Filled in a first draft of `Documentation_template.md` (repo root): Executive Summary, Methodology, Candidate Generation/Blocking, Matching Model sections written from the actual implementation. Results section explicitly left as TODO with a clear placeholder note at the top of the file — do not submit until that's replaced with real numbers.
 - Per user request, resuming git usage from this point: about to run `git add` + `git commit` (still no push) so this state is committed for colleagues to pull.
+
+### 2026-09-27 — blocking.py rewritten: independent routes + union (teammates' finding)
+- Teammates ran real experiments on Kaggle (full compute, no timeout there) with the OLD single-combined-score blocking:
+  - 1K S1 / 5K+5K S2/S3, top_k=20: recall=0.3%, F0.5=0.055 (sanity-check scale only, not meaningful)
+  - 20K S1 / 1M+1M, top_k=20: recall=13.2%, F0.5=0.283
+  - 20K S1 / 5M+5M, top_k=20: recall=58.8%, F0.5=0.670
+  - 20K S1 / 5M+5M, top_k=50: recall=63.7%, F0.5=0.701
+  - Diagnosis: ~36% of true matches never reach the classifier (blocking recall ceiling, not model quality, is the #1 bottleneck). Also flagged: current --n1 takes the FIRST N rows of S1, not a random sample, so validation isn't representative.
+- **Rewrote `blocking.py`**: `candidates_for_entity` now runs three INDEPENDENT routes (name-token IDF score, exact PIN, exact locality), ranks+caps each on its own (`per_route_k`, defaults to `top_k`), then UNIONS them, instead of one combined score with a single global top-K cutoff. Rationale: a true match with a strong PIN/locality signal but weak/no name overlap can get crowded out of a combined ranking by many candidates sharing a moderately-rare name token (their IDF weight can exceed the flat PIN/locality bonus once the corpus is large) -- independent routes guarantee it survives regardless of how the other route ranks. `final_top_k` param added for an optional cap AFTER the union (default None = no cap, prioritizing recall per teammates' stated target of ~80-90%, until size/recall tradeoff is tuned).
+- **Fixed S1 sampling**: `build_candidates.load_and_normalize` gained a `sample_n` param that reads the FULL file then takes a true random sample (`df.sample`), vs `nrows` which is still available for S2/S3 dev-mode row caps (order-independent, since final run uses full files anyway). `train.py --n1` now uses `sample_n` (true random sample) instead of `nrows` (first-N).
+- Updated `train.py`/`predict.py`: new `--per-route-k` / `--final-top-k` flags, `threshold.json` now also records the blocking params used so `predict.py` can reuse them automatically.
+- **Verified the fix with a deterministic synthetic test** (not real-scale data — see below for why): constructed 25 noise candidates with inflated IDF-weighted name scores (~6.4 each, exceeding the PIN route's flat +5 bonus) plus one true match sharing zero name tokens but the correct PIN. OLD-style single-combined-score top-20: true match dropped (False). NEW route-union: true match kept (True). This proves the mechanism is fixed; it does not by itself give a new real recall-ceiling number.
+- **IMPORTANT LIMITATION FOUND**: this cloud-to-laptop bridge (device_bash) caps every call at ~178s. Tried to reproduce teammates' 1M+1M experiment here for a real before/after comparison; the index build alone for 500K+500K records did not finish within that window (confirmed via `timeout 170` + redirected log: load finished at 92s, index build for 1M combined records still running when killed at 170s). **This environment cannot reproduce Kaggle-scale runs** -- real recall-ceiling numbers for the new blocking must come from teammates re-running on Kaggle, not from here.
+- Ran small-scale sanity checks only (n1=3000, n23=300K): pipeline runs end-to-end with the new code, no errors, output format unaffected. Recall ceiling at this scale is still dominated by the "S2/S3 row-prefix sample is tiny relative to 5M+ real files" artifact, same as always -- not informative about the union-blocking fix's real impact.
+
+## Next up (for whoever runs this on Kaggle)
+Re-run the SAME experiment sizes your teammates already used, with this updated code, for an apples-to-apples before/after:
+```bash
+# matches "Experiment 2" (was 13.2% recall / F0.5=0.283 with old blocking)
+python3 code/business_entity_resolution/src/train.py --n1 20000 --n23 1000000 --top-k 20
+
+# matches "Experiment 3" (was 58.8% recall / F0.5=0.670)
+python3 code/business_entity_resolution/src/train.py --n1 20000 --n23 5000000 --top-k 20
+
+# matches "Experiment 4" (was 63.7% recall / F0.5=0.701)
+python3 code/business_entity_resolution/src/train.py --n1 20000 --n23 5000000 --top-k 50
+```
+Compare the printed "blocking recall ceiling on val split" against the numbers above. If it's meaningfully higher (target ~80-90% per teammates' stated goal), the union-blocking fix is validated at real scale; if not, the per_route_k/final_top_k knobs need further tuning (try raising per_route_k independently of top_k, or check whether locality-route candidate counts are exploding and drowning the union in noise -- that's the most likely secondary failure mode of this fix, untested at real scale).
+
+Also note: `--n1` now takes a TRUE RANDOM sample (not first-N) as of this change -- numbers won't be bit-for-bit comparable to teammates' logged runs for that reason alone, on top of the blocking change. If an apples-to-apples read on blocking ALONE is wanted first, could temporarily pin `--seed` and compare, or test on the first-20K-rows-equivalent by another means -- not done here, flagging as an option.
